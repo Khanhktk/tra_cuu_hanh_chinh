@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tra cứu hành chính sau sáp nhập</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex items-center justify-center px-4">
+
+  <div class="bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-6 w-full max-w-xl">
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-xl font-bold">Tra cứu hành chính sau sáp nhập</h1>
+      <button onclick="toggleDarkMode()" class="text-sm text-blue-500">Chế độ tối</button>
+    </div>
+
+    <label class="block text-sm font-medium">Chọn tỉnh/thành:</label>
+    <select id="tinh" class="w-full mt-1 mb-4 p-2 rounded border border-gray-300 dark:bg-gray-700 dark:border-gray-600">
+      <option value="">-- Chọn tỉnh/thành --</option>
+    </select>
+
+    <label class="block text-sm font-medium">Tìm xã/phường:</label>
+    <input type="text" id="xaInput" class="w-full mt-1 mb-4 p-2 rounded border border-gray-300 dark:bg-gray-700 dark:border-gray-600" placeholder="Nhập tên xã/phường...">
+
+    <ul id="suggestions" class="bg-white dark:bg-gray-700 shadow rounded mt-1 max-h-40 overflow-y-auto hidden"></ul>
+
+    <button id="search" class="w-full mt-4 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Tra cứu</button>
+
+    <div id="result" class="mt-4 text-center text-sm"></div>
+    <div id="history" class="mt-6 text-xs text-gray-500 dark:text-gray-400"></div>
+  </div>
+
+  <script>
+    const apiXaEndpoint = 'https://thuviennhadat.vn/api/danh-sach-xa?MaTinh=';
+    const apiTinhEndpoint = 'https://thuviennhadat.vn/api/danh-sach-tinh';
+    const tinhSelect = document.getElementById('tinh');
+    const xaInput = document.getElementById('xaInput');
+    const suggestions = document.getElementById('suggestions');
+    const result = document.getElementById('result');
+    const historyEl = document.getElementById('history');
+    let xaList = [];
+
+    async function loadProvinces() {
+      try {
+        const res = await fetch(apiTinhEndpoint);
+        const provinces = await res.json();
+        provinces.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          tinhSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Không thể tải danh sách tỉnh/thành.', e);
+      }
+    }
+
+    tinhSelect.addEventListener('change', async () => {
+      const maTinh = tinhSelect.value;
+      xaInput.value = '';
+      xaInput.dataset.id = '';
+      suggestions.innerHTML = '';
+      suggestions.classList.add('hidden');
+      if (!maTinh) return;
+      try {
+        const res = await fetch(apiXaEndpoint + maTinh);
+        xaList = await res.json();
+      } catch (e) {
+        console.error('Không thể tải danh sách xã/phường.', e);
+        xaList = [];
+      }
+    });
+
+    xaInput.addEventListener('input', () => {
+      const query = xaInput.value.toLowerCase();
+      suggestions.innerHTML = '';
+      if (!query || xaList.length === 0) {
+        suggestions.classList.add('hidden');
+        return;
+      }
+
+      const matches = xaList.filter(x => x.name.toLowerCase().includes(query));
+      if (matches.length === 0) {
+        suggestions.classList.add('hidden');
+        return;
+      }
+
+      matches.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item.name;
+        li.className = 'px-3 py-1 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900';
+        li.onclick = () => {
+          xaInput.value = item.name;
+          xaInput.dataset.id = item.id;
+          suggestions.classList.add('hidden');
+        };
+        suggestions.appendChild(li);
+      });
+      suggestions.classList.remove('hidden');
+    });
+
+    document.getElementById('search').addEventListener('click', () => {
+      const tinh = tinhSelect.value;
+      const xaId = xaInput.dataset.id;
+      if (!tinh || !xaId) {
+        result.textContent = 'Vui lòng chọn tỉnh và xã/phường chính xác từ gợi ý.';
+        return;
+      }
+      const url = `https://thuviennhadat.vn/sap-nhap-tinh?MaTinh=${tinh}&MaXa=${xaId}`;
+      window.open(url, '_blank');
+      saveToHistory(tinh, xaInput.value);
+    });
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark');
+    }
+
+    function saveToHistory(maTinh, tenXa) {
+      const h = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+      h.unshift({ tinh: maTinh, xa: tenXa, time: new Date().toLocaleString() });
+      localStorage.setItem('searchHistory', JSON.stringify(h.slice(0, 5)));
+      showHistory();
+    }
+
+    function showHistory() {
+      const h = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+      if (h.length === 0) return;
+      historyEl.innerHTML = '<strong>Lịch sử tra cứu:</strong><ul class="mt-1 space-y-1">' +
+        h.map(item => `<li>${item.xa} (Tỉnh ${item.tinh}) lúc ${item.time}</li>`).join('') + '</ul>';
+    }
+
+    loadProvinces();
+    showHistory();
+  </script>
+</body>
+</html>
